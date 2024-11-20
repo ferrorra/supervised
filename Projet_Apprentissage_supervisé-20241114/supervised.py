@@ -51,13 +51,14 @@ from preparation import encode_categorical, check_multicollinearity, scale_data,
 cv = StratifiedKFold(n_splits=5, random_state=42, shuffle=True)
 
 
-def logistic_regression_model(X, y, sampling_type=None, method=None):
+def logistic_regression_model(X, y, sampling_type=None, method=None, encode=True):
     """
     Logistic Regression with Grid Search and Sampling.
     Preprocessing: OneHotEncoding and handling class imbalance.
     """
     # Apply necessary preprocessing
-    X = encode_categorical(X, method="onehot")  # Ensure categorical variables are encoded
+    if encode==True:
+        X = encode_categorical(X, method="onehot")  # Ensure categorical variables are encoded
     vif_data = check_multicollinearity(X)
 
     # Handle class imbalance if needed
@@ -88,13 +89,14 @@ def logistic_regression_model(X, y, sampling_type=None, method=None):
 
 
 
-def random_forest_model(X, y, sampling_type=None, method=None):
+def random_forest_model(X, y, sampling_type=None, method=None, encode=True):
     """
     Random Forest with Grid Search and Sampling.
     Preprocessing: LabelEncoding for categorical variables.
     """
     # Apply necessary preprocessing
-    X = encode_categorical(X, method="label")
+    if encode==True:
+        X = encode_categorical(X, method="label")
     
     # Handle class imbalance if needed
     if sampling_type and method:
@@ -116,28 +118,27 @@ def random_forest_model(X, y, sampling_type=None, method=None):
 
     return grid_search.best_estimator_, grid_search.best_params_
 
-
-def gradient_boosting_model(X, y, sampling_type=None, method=None):
+def gradient_boosting_model(X, y, sampling_type=None, method=None, encode=True):
     """
     Gradient Boosting with Grid Search and Sampling.
-    Preprocessing: OneHotEncoding, class imbalance check and adjustment with class_weight.
+    Preprocessing: OneHotEncoding, class imbalance check.
     """
     # Apply necessary preprocessing
-    X = encode_categorical(X, method="onehot")
-    class_distribution = check_class_imbalance(y)
-    
+    if encode==True:
+        X = encode_categorical(X, method="onehot")
+
     # Handle class imbalance if needed
     if sampling_type and method:
         X, y = balance_data(X, y, method=method, sampling_type=sampling_type)
-    
+
     # Gradient Boosting parameter grid
     param_grid = {
         'n_estimators': [50, 100, 200],
         'learning_rate': [0.01, 0.1, 0.2],
         'max_depth': [3, 5, 7]
     }
-    
-    model = GradientBoostingEarlyStopping()
+
+    model = GradientBoostingClassifier()
 
     # Perform Grid Search
     print("Running Gradient Boosting grid search...")
@@ -146,14 +147,157 @@ def gradient_boosting_model(X, y, sampling_type=None, method=None):
 
     return grid_search.best_estimator_, grid_search.best_params_
 
+from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
 
-def decision_tree_model(X, y, sampling_type=None, method=None):
+def lda_model(X, y, sampling_type=None, method=None, encode=True):
+    """
+    Linear Discriminant Analysis with Sampling.
+    Preprocessing: OneHotEncoding for categorical variables.
+    """
+    # Apply necessary preprocessing
+    if encode==True:
+        X = encode_categorical(X, method="onehot")
+
+    # Handle class imbalance if needed
+    if sampling_type and method:
+        X, y = balance_data(X, y, method=method, sampling_type=sampling_type)
+
+    model = LinearDiscriminantAnalysis()
+    
+    print("Fitting LDA...")
+    model.fit(X, y)
+    
+    return model, None  # No hyperparameter tuning
+
+
+from sklearn.discriminant_analysis import QuadraticDiscriminantAnalysis
+
+def qda_model(X, y, sampling_type=None, method=None, encode=True):
+    """
+    Quadratic Discriminant Analysis with Sampling.
+    Preprocessing: OneHotEncoding for categorical variables.
+    """
+    # Apply necessary preprocessing
+    if encode==True:
+        X = encode_categorical(X, method="onehot")
+
+    # Handle class imbalance if needed
+    if sampling_type and method:
+        X, y = balance_data(X, y, method=method, sampling_type=sampling_type)
+
+    model = QuadraticDiscriminantAnalysis()
+
+    print("Fitting QDA...")
+    model.fit(X, y)
+
+    return model, None  # No hyperparameter tuning
+
+
+from xgboost import XGBClassifier
+
+def xgboost_model(X, y, sampling_type=None, method=None, encode=True):
+    """
+    XGBoost with Grid Search and Sampling.
+    Preprocessing: OneHotEncoding for categorical variables.
+    """
+    # Apply necessary preprocessing
+    if encode==True:
+        X = encode_categorical(X, method="onehot")
+
+    # Handle class imbalance if needed
+    if sampling_type and method:
+        X, y = balance_data(X, y, method=method, sampling_type=sampling_type)
+
+    # XGBoost parameter grid
+    param_grid = {
+        'n_estimators': [50, 100, 200],
+        'learning_rate': [0.01, 0.1, 0.2],
+        'max_depth': [3, 5, 7]
+    }
+
+    model = XGBClassifier(use_label_encoder=False, eval_metric='logloss')
+
+    # Perform Grid Search
+    print("Running XGBoost grid search...")
+    grid_search = GridSearchCV(model, param_grid, cv=cv, scoring='accuracy', n_jobs=-1)
+    grid_search.fit(X, y)
+
+    return grid_search.best_estimator_, grid_search.best_params_
+
+
+
+from sklearn.ensemble import ExtraTreesClassifier
+
+def extra_trees_model(X, y, sampling_type=None, method=None, encode=True):
+    """
+    Extra Trees (XtremTree) with Grid Search and Sampling.
+    Preprocessing: OneHotEncoding for categorical variables.
+    """
+    # Apply necessary preprocessing
+    if encode==True:
+        X = encode_categorical(X, method="onehot")
+
+    # Handle class imbalance if needed
+    if sampling_type and method:
+        X, y = balance_data(X, y, method=method, sampling_type=sampling_type)
+
+    # Extra Trees parameter grid
+    param_grid = {
+        'n_estimators': [50, 100, 200],
+        'max_depth': [None, 10, 20, 30],
+        'min_samples_split': [2, 5, 10]
+    }
+
+    model = ExtraTreesClassifier()
+
+    # Perform Grid Search
+    print("Running Extra Trees grid search...")
+    grid_search = GridSearchCV(model, param_grid, cv=cv, scoring='accuracy', n_jobs=-1)
+    grid_search.fit(X, y)
+
+    return grid_search.best_estimator_, grid_search.best_params_
+
+
+from sklearn.ensemble import AdaBoostClassifier
+
+def adaboost_model(X, y, sampling_type=None, method=None, encode=True):
+    """
+    AdaBoost with Grid Search and Sampling.
+    Preprocessing: OneHotEncoding for categorical variables.
+    """
+    # Apply necessary preprocessing
+    if encode==True:
+        X = encode_categorical(X, method="onehot")
+
+    # Handle class imbalance if needed
+    if sampling_type and method:
+        X, y = balance_data(X, y, method=method, sampling_type=sampling_type)
+
+    # AdaBoost parameter grid
+    param_grid = {
+        'n_estimators': [50, 100, 200],
+        'learning_rate': [0.01, 0.1, 0.2]
+    }
+
+    model = AdaBoostClassifier()
+
+    # Perform Grid Search
+    print("Running AdaBoost grid search...")
+    grid_search = GridSearchCV(model, param_grid, cv=cv, scoring='accuracy', n_jobs=-1)
+    grid_search.fit(X, y)
+
+    return grid_search.best_estimator_, grid_search.best_params_
+
+
+
+def decision_tree_model(X, y, sampling_type=None, method=None, encode=True):
     """
     Decision Tree with Grid Search and Sampling.
     Preprocessing: LabelEncoding for categorical variables.
     """
     # Apply necessary preprocessing
-    X = encode_categorical(X, method="label")
+    if encode==True:
+        X = encode_categorical(X, method="label")
     
     # Handle class imbalance if needed
     if sampling_type and method:
@@ -175,13 +319,14 @@ def decision_tree_model(X, y, sampling_type=None, method=None):
     return grid_search.best_estimator_, grid_search.best_params_
 
 
-def knn_model(X, y, sampling_type=None, method=None):
+def knn_model(X, y, sampling_type=None, method=None, encode=True):
     """
     K-Nearest Neighbors with Grid Search and Sampling.
     Preprocessing: OneHotEncoding, StandardScaler for normalization.
     """
     # Apply necessary preprocessing
-    X = encode_categorical(X, method="onehot")
+    if encode==True:
+        X = encode_categorical(X, method="onehot")
     X = scale_data(X, method="standard")
     
     # Handle class imbalance if needed
@@ -205,13 +350,14 @@ def knn_model(X, y, sampling_type=None, method=None):
     return grid_search.best_estimator_, grid_search.best_params_
 
 
-def svm_model(X, y, sampling_type=None, method=None):
+def svm_model(X, y, sampling_type=None, method=None, encode=True):
     """
     Support Vector Machine (Linear) with Grid Search and Sampling.
     Preprocessing: OneHotEncoding, StandardScaler for normalization.
     """
     # Apply necessary preprocessing
-    X = encode_categorical(X, method="onehot")
+    if encode==True:
+        X = encode_categorical(X, method="onehot")
     X = scale_data(X, method="standard")
     
     # Handle class imbalance if needed
@@ -221,10 +367,10 @@ def svm_model(X, y, sampling_type=None, method=None):
     # SVM parameter grid
     param_grid = {
         'C': [0.1, 1, 10, 100],
-        'kernel': ['linear']
+        'kernel': ['linear','rbf']
     }
     
-    model = SVC()
+    model = SVC(probability=True)
 
     # Perform Grid Search
     print("Running SVM grid search...")
@@ -234,13 +380,14 @@ def svm_model(X, y, sampling_type=None, method=None):
     return grid_search.best_estimator_, grid_search.best_params_
 
 
-def naive_bayes_model(X, y, sampling_type=None, method=None):
+def naive_bayes_model(X, y, sampling_type=None, method=None, encode=True):
     """
     Naive Bayes with Sampling.
     Preprocessing: OneHotEncoding.
     """
     # Apply necessary preprocessing
-    X = encode_categorical(X, method="onehot")
+    if encode==True:
+        X = encode_categorical(X, method="onehot")
     
     # Handle class imbalance if needed
     if sampling_type and method:
