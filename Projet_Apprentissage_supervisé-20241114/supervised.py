@@ -29,6 +29,7 @@ from sklearn.neighbors import KNeighborsClassifier
 from sklearn.svm import SVC
 from sklearn.naive_bayes import GaussianNB
 import os
+from sklearn.metrics import accuracy_score  
 
 from sklearn.model_selection import GridSearchCV, StratifiedKFold
 from joblib import dump, load
@@ -45,10 +46,6 @@ from sklearn.svm import SVC
 from sklearn.naive_bayes import GaussianNB
 from preparation import encode_categorical, check_multicollinearity, scale_data, balance_data, check_class_imbalance
 
-# Stratified K-Fold cross-validation
-cv = StratifiedKFold(n_splits=5, random_state=42, shuffle=True)
-
-
 
 # Stratified K-Fold cross-validation
 cv = StratifiedKFold(n_splits=5, random_state=42, shuffle=True)
@@ -57,7 +54,7 @@ cv = StratifiedKFold(n_splits=5, random_state=42, shuffle=True)
 def logistic_regression_model(X, y, sampling_type=None, method=None):
     """
     Logistic Regression with Grid Search and Sampling.
-    Preprocessing: OneHotEncoding, multicollinearity check (VIF).
+    Preprocessing: OneHotEncoding and handling class imbalance.
     """
     # Apply necessary preprocessing
     X = encode_categorical(X, method="onehot")  # Ensure categorical variables are encoded
@@ -67,15 +64,17 @@ def logistic_regression_model(X, y, sampling_type=None, method=None):
     if sampling_type and method:
         X, y = balance_data(X, y, method=method, sampling_type=sampling_type)
 
-    #print(f'Data has {X.isna().sum().sum()} missing values after preprocessing.')
+        # Ensure the balanced data remains compatible with scikit-learn
+        if isinstance(X, np.ndarray):
+            X = pd.DataFrame(X)  # Convert back to DataFrame without requiring vif_data
 
     # Logistic Regression parameter grid
     param_grid = {
-        'C': [0.01, 0.1, 1, 10, 100,1000],
-        'penalty': ['l2','l1'],  # Regularization
+        'C': [0.01, 0.1, 1, 10, 100],
+        'penalty': ['l2'],  # Only l2 supported for lbfgs
         'solver': ['lbfgs']
     }
-    
+
     model = LogisticRegression()
 
     # Perform Grid Search
@@ -83,7 +82,10 @@ def logistic_regression_model(X, y, sampling_type=None, method=None):
     grid_search = GridSearchCV(model, param_grid, cv=cv, scoring='accuracy', n_jobs=-1)
     grid_search.fit(X, y)
 
+    print(f"Best Params: {grid_search.best_params_}")
     return grid_search.best_estimator_, grid_search.best_params_
+
+
 
 
 def random_forest_model(X, y, sampling_type=None, method=None):

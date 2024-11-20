@@ -56,6 +56,10 @@ def balance_data(X, y, method="SMOTE", sampling_type="oversampling"):
     Retour :
     - X_resampled, y_resampled : ensembles rééquilibrés.
     """
+    from imblearn.over_sampling import SMOTE, ADASYN
+    from imblearn.under_sampling import RandomUnderSampler, TomekLinks, NearMiss
+    from imblearn.combine import SMOTETomek, SMOTEENN
+
     X_resampled, y_resampled = None, None
 
     # Convert DataFrame to ensure compatibility with Imbalanced-learn
@@ -97,7 +101,7 @@ def balance_data(X, y, method="SMOTE", sampling_type="oversampling"):
 
     # Preprocess X based on the sampler requirements
     # For oversampling methods like SMOTE and ADASYN, we need numeric data
-    if sampling_type == "oversampling" or sampling_type == "combination":
+    if sampling_type in ["oversampling", "combination"]:
         if not np.issubdtype(X.values.dtype, np.number):
             print("Encodage des variables catégoriques pour oversampling.")
             X = pd.get_dummies(X, drop_first=True)  # One-hot encode categorical variables
@@ -110,6 +114,11 @@ def balance_data(X, y, method="SMOTE", sampling_type="oversampling"):
     # Apply the selected sampling strategy
     try:
         X_resampled, y_resampled = sampler.fit_resample(X, y)
+        
+        # Convert back to DataFrame if X has feature names
+        if isinstance(X, pd.DataFrame):
+            X_resampled = pd.DataFrame(X_resampled, columns=X.columns)
+
         print(f"Équilibrage effectué avec {method} ({sampling_type}).")
     except Exception as e:
         print(f"Erreur lors de l'application de la méthode {method} : {e}")
@@ -117,16 +126,27 @@ def balance_data(X, y, method="SMOTE", sampling_type="oversampling"):
 
     return X_resampled, y_resampled
 
+
 # 1. Encodage des variables catégoriques
 from sklearn.preprocessing import OneHotEncoder, LabelEncoder
 import pandas as pd
 import numpy as np
+
+from sklearn.preprocessing import OneHotEncoder, LabelEncoder
 
 def encode_categorical(data, method="onehot"):
     """
     Encode les variables catégoriques.
     - method : "onehot" ou "label".
     """
+    import pandas as pd
+    from sklearn.preprocessing import OneHotEncoder, LabelEncoder
+
+    # If data is a numpy array, return it as-is (no encoding is possible)
+    if isinstance(data, np.ndarray):
+        print("Data is a numpy array. Skipping categorical encoding.")
+        return data
+
     if method == "onehot":
         encoder = OneHotEncoder(drop='first', sparse=False, handle_unknown="ignore")  # Handle unknown categories gracefully
         categorical_cols = data.select_dtypes(include=['object', 'category']).columns
@@ -169,17 +189,28 @@ def encode_categorical(data, method="onehot"):
 
 
 # 2. Vérification de la multicolinéarité
+from statsmodels.stats.outliers_influence import variance_inflation_factor
+
 def check_multicollinearity(data, threshold=5.0):
     """
     Vérifie la multicolinéarité des variables numériques via le VIF.
     Retourne un DataFrame avec les VIF calculés.
     """
+    import pandas as pd
+    from statsmodels.stats.outliers_influence import variance_inflation_factor
+
+    # Ensure data is a DataFrame
+    if isinstance(data, np.ndarray):
+        raise ValueError("Data passed to `check_multicollinearity` must be a pandas DataFrame.")
+
     numeric_data = data.select_dtypes(include=['float', 'int'])
     vif_data = pd.DataFrame()
     vif_data["feature"] = numeric_data.columns
     vif_data["VIF"] = [variance_inflation_factor(numeric_data.values, i) for i in range(numeric_data.shape[1])]
     print("Calcul des VIF terminé.")
     return vif_data[vif_data["VIF"] > threshold]
+
+
 
 # 3. Vérification du déséquilibre des classes
 def check_class_imbalance(y):
