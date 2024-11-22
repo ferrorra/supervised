@@ -59,7 +59,7 @@ def logistic_regression_model(X, y, sampling_type=None, method=None, encode=True
     # Apply necessary preprocessing
     if encode==True:
         X = encode_categorical(X, method="onehot")  # Ensure categorical variables are encoded
-    vif_data = check_multicollinearity(X)
+    #vif_data = check_multicollinearity(X)
 
     # Handle class imbalance if needed
     if sampling_type and method:
@@ -195,18 +195,42 @@ def qda_model(X, y, sampling_type=None, method=None, encode=True):
 
 from xgboost import XGBClassifier
 
+from xgboost import XGBClassifier
+from sklearn.model_selection import GridSearchCV
+
 def xgboost_model(X, y, sampling_type=None, method=None, encode=True):
     """
     XGBoost with Grid Search and Sampling.
+    Supports both binary and multiclass classification.
     Preprocessing: OneHotEncoding for categorical variables.
+    
+    Parameters:
+    - X: Features (DataFrame or array-like).
+    - y: Target variable (array-like).
+    - sampling_type: str, type of sampling ("oversampling", "undersampling", or "combination").
+    - method: str, sampling method (e.g., "SMOTE", "NearMiss").
+    - encode: bool, whether to encode categorical features.
+
+    Returns:
+    - best_model: Trained XGBoost model with best parameters.
+    - best_params: Best parameters from grid search.
     """
     # Apply necessary preprocessing
-    if encode==True:
+    if encode:
         X = encode_categorical(X, method="onehot")
 
     # Handle class imbalance if needed
     if sampling_type and method:
         X, y = balance_data(X, y, method=method, sampling_type=sampling_type)
+
+    # Determine the number of classes
+    num_classes = len(set(y))
+    if num_classes > 2:
+        objective = "multi:softprob"  # Multiclass classification
+        eval_metric = "mlogloss"
+    else:
+        objective = "binary:logistic"  # Binary classification
+        eval_metric = "logloss"
 
     # XGBoost parameter grid
     param_grid = {
@@ -215,14 +239,16 @@ def xgboost_model(X, y, sampling_type=None, method=None, encode=True):
         'max_depth': [3, 5, 7]
     }
 
-    model = XGBClassifier(use_label_encoder=False, eval_metric='logloss')
+    model = XGBClassifier(use_label_encoder=False, objective=objective, eval_metric=eval_metric)
 
     # Perform Grid Search
-    print("Running XGBoost grid search...")
+    print(f"Running XGBoost grid search for {'multiclass' if num_classes > 2 else 'binary'} classification...")
     grid_search = GridSearchCV(model, param_grid, cv=cv, scoring='accuracy', n_jobs=-1)
     grid_search.fit(X, y)
 
+    print(f"Best Params: {grid_search.best_params_}")
     return grid_search.best_estimator_, grid_search.best_params_
+
 
 
 

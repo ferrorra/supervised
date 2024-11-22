@@ -4,7 +4,7 @@ from sklearn.metrics import accuracy_score  # Ensure this is imported
 
 import numpy as np
 
-def evaluate_model_with_sampling(model_func, model_name, X, y):
+def evaluate_model_with_sampling(model_func, model_name, X, y, encode=True):
     """
     Evaluates a model with different sampling techniques (oversampling, undersampling, combination).
     It adjusts the sampling parameters dynamically and calls the provided model function.
@@ -14,7 +14,8 @@ def evaluate_model_with_sampling(model_func, model_name, X, y):
     - model_name: str, the name of the model.
     - X: Features (DataFrame or array-like).
     - y: Target variable (Series or array-like).
-    
+    - encode: bool, whether to apply encoding to categorical columns.
+
     Returns:
     - results: dict, containing the best parameters for each sampling method.
     - best_method: str, the sampling method with the best performance.
@@ -31,19 +32,23 @@ def evaluate_model_with_sampling(model_func, model_name, X, y):
     best_accuracy = -1
     best_method = None
 
-    # Initialize OneHotEncoder for categorical encoding
-    categorical_cols = X.select_dtypes(include=['object', 'category']).columns
-    encoder = OneHotEncoder(drop='first', sparse=False, handle_unknown='ignore')
-    
-    if len(categorical_cols) > 0:
-        X_encoded = pd.DataFrame(
-            encoder.fit_transform(X[categorical_cols]),
-            columns=encoder.get_feature_names_out(categorical_cols),
-            index=X.index
-        )
-        # Combine numeric features with encoded features
-        X_encoded = pd.concat([X.drop(categorical_cols, axis=1), X_encoded], axis=1)
+    if encode:
+        # Initialize OneHotEncoder for categorical encoding
+        categorical_cols = X.select_dtypes(include=['object', 'category']).columns
+        encoder = OneHotEncoder(drop='first', sparse=False, handle_unknown='ignore')
+
+        if len(categorical_cols) > 0:
+            X_encoded = pd.DataFrame(
+                encoder.fit_transform(X[categorical_cols]),
+                columns=encoder.get_feature_names_out(categorical_cols),
+                index=X.index
+            )
+            # Combine numeric features with encoded features
+            X_encoded = pd.concat([X.drop(categorical_cols, axis=1), X_encoded], axis=1)
+        else:
+            X_encoded = X.copy()
     else:
+        # Skip encoding when encode=False
         X_encoded = X.copy()
 
     for sampling_type, params in sampling_methods.items():
@@ -51,7 +56,7 @@ def evaluate_model_with_sampling(model_func, model_name, X, y):
 
         # Call the model function with balanced data
         model, best_params = model_func(
-            X_encoded, y, sampling_type=params["sampling_type"], method=params["method"]
+            X_encoded, y, sampling_type=params["sampling_type"], method=params["method"], encode=encode
         )
         print(f"{model_name} ({sampling_type}): Best Params: {best_params}")
 
@@ -110,8 +115,9 @@ def full_analysis_with_visuals(
     best_method,
     X_test,
     y_test,
-    encoder,
+    encoder=None,
     title="Model Performance Analysis",
+    binary=True
 ):
     """
     Performs a full analysis of the model with detailed visualizations:
@@ -130,7 +136,8 @@ def full_analysis_with_visuals(
     - y_test: Target variable for testing (Series or array-like).
     - encoder: OneHotEncoder used during training.
     - title: str, Title of the overall analysis.
-    
+    - binary: bool, if True assumes binary classification, otherwise supports multiclass.
+
     Returns:
     - None, generates visualizations.
     """
@@ -144,9 +151,10 @@ def full_analysis_with_visuals(
         )
         X_test = pd.concat([X_test.drop(categorical_cols, axis=1), X_encoded], axis=1)
 
-    # Map y_test values to 0 and 1 if they are in {1, 2}
-    print("Mapping target labels {1, 2} to {0, 1} for compatibility...")
-    y_test = np.where(y_test == 1, 0, 1)
+    # Map y_test values to 0 and 1 for binary classification
+    if binary:
+        print("Mapping target labels {1, 2} to {0, 1} for binary classification compatibility...")
+        y_test = np.where(y_test == 1, 0, 1)
 
     # Retrieve the best parameters and train the model
     best_params = results[best_method]["Best Params"]
@@ -156,34 +164,33 @@ def full_analysis_with_visuals(
     # Predict probabilities and labels
     y_pred = model.predict(X_test)
     y_pred_proba = (
-        model.predict_proba(X_test)[:, 1] if hasattr(model, "predict_proba") else None
+        model.predict_proba(X_test) if hasattr(model, "predict_proba") else None
     )
 
-    # ROC and AUC
-    if y_pred_proba is not None:
-        fpr, tpr, _ = roc_curve(y_test, y_pred_proba, pos_label=1)
+    # ROC and AUC (binary only)
+    if binary and y_pred_proba is not None:
+        fpr, tpr, _ = roc_curve(y_test, y_pred_proba[:, 1], pos_label=1)
         roc_auc = auc(fpr, tpr)
 
-    # Precision-Recall Curve
-    precision, recall, _ = (
-        precision_recall_curve(y_test, y_pred_proba)
-        if y_pred_proba is not None
-        else (None, None)
-    )
+    # Precision-Recall Curve (binary only)
+    if binary and y_pred_proba is not None:
+        precision, recall, _ = precision_recall_curve(y_test, y_pred_proba[:, 1])
+    else:
+        precision, recall = None, None
 
     # Confusion Matrix
     cm = confusion_matrix(y_test, y_pred)
     cm_df = pd.DataFrame(
         cm,
-        index=["Actual Negative", "Actual Positive"],
-        columns=["Predicted Negative", "Predicted Positive"],
+        index=[f"Actual {label}" for label in np.unique(y_test)],
+        columns=[f"Predicted {label}" for label in np.unique(y_test)],
     )
 
     # Classification Report
     clf_report = classification_report(y_test, y_pred)
 
-    # Subplot 1: ROC Curve
-    if y_pred_proba is not None:
+    # Subplot 1: ROC Curve (only for binary)
+    if binary and y_pred_proba is not None:
         plt.figure(figsize=(8, 6))
         plt.plot(fpr, tpr, color="blue", lw=2, label=f"ROC Curve (AUC = {roc_auc:.2f})")
         plt.plot(
@@ -196,8 +203,8 @@ def full_analysis_with_visuals(
         plt.grid()
         plt.show()
 
-    # Subplot 2: Precision-Recall Curve
-    if precision is not None and recall is not None:
+    # Subplot 2: Precision-Recall Curve (only for binary)
+    if binary and precision is not None and recall is not None:
         plt.figure(figsize=(8, 6))
         plt.plot(recall, precision, color="purple", lw=2, label="Precision-Recall Curve")
         plt.title(f"{title} - Precision-Recall Curve")

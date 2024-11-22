@@ -64,7 +64,11 @@ def balance_data(X, y, method="SMOTE", sampling_type="oversampling"):
 
     # Convert DataFrame to ensure compatibility with Imbalanced-learn
     if isinstance(X, pd.DataFrame):
-        X = X.copy()  # Avoid changing original data
+        is_dataframe = True
+        X_array = X.values  # Work with array-like structure
+    else:
+        is_dataframe = False
+        X_array = X  # Already array-like
 
     # Define the sampler based on the method and sampling_type
     if sampling_type == "oversampling":
@@ -72,7 +76,7 @@ def balance_data(X, y, method="SMOTE", sampling_type="oversampling"):
             sampler = SMOTE()
         elif method == "ADASYN":
             # ADASYN requires numeric data
-            if not np.issubdtype(X.values.dtype, np.number):
+            if not np.issubdtype(X_array.dtype, np.number):
                 raise ValueError("ADASYN requires numeric data. Please encode categorical variables first.")
             sampler = ADASYN()
         else:
@@ -102,21 +106,24 @@ def balance_data(X, y, method="SMOTE", sampling_type="oversampling"):
     # Preprocess X based on the sampler requirements
     # For oversampling methods like SMOTE and ADASYN, we need numeric data
     if sampling_type in ["oversampling", "combination"]:
-        if not np.issubdtype(X.values.dtype, np.number):
+        if not np.issubdtype(X_array.dtype, np.number):
             print("Encodage des variables catégoriques pour oversampling.")
-            X = pd.get_dummies(X, drop_first=True)  # One-hot encode categorical variables
+            if is_dataframe:
+                X_array = pd.get_dummies(X, drop_first=True).values  # Convert to array
+            else:
+                raise ValueError("Categorical variables cannot be processed in array format. Use a DataFrame.")
 
     # Standardize numerical data for methods that rely on distances (if not already numeric)
     if sampling_type == "oversampling" and method in ["SMOTE", "ADASYN"]:
         scaler = StandardScaler()
-        X = scaler.fit_transform(X)
+        X_array = scaler.fit_transform(X_array)
 
     # Apply the selected sampling strategy
     try:
-        X_resampled, y_resampled = sampler.fit_resample(X, y)
-        
-        # Convert back to DataFrame if X has feature names
-        if isinstance(X, pd.DataFrame):
+        X_resampled, y_resampled = sampler.fit_resample(X_array, y)
+
+        # Convert back to DataFrame if input was a DataFrame
+        if is_dataframe:
             X_resampled = pd.DataFrame(X_resampled, columns=X.columns)
 
         print(f"Équilibrage effectué avec {method} ({sampling_type}).")
@@ -125,6 +132,7 @@ def balance_data(X, y, method="SMOTE", sampling_type="oversampling"):
         raise
 
     return X_resampled, y_resampled
+
 
 
 # 1. Encodage des variables catégoriques
@@ -223,16 +231,40 @@ def check_class_imbalance(y):
     return class_distribution
 
 # 4. Normalisation ou standardisation
+from sklearn.preprocessing import StandardScaler, MinMaxScaler
+import numpy as np
+import pandas as pd
+
 def scale_data(data, method="standard"):
     """
-    Applique une normalisation ou standardisation aux colonnes numériques.
-    - method : "standard" (StandardScaler) ou "minmax".
+    Applies normalization or standardization to numerical columns.
+    Works with both Pandas DataFrames and NumPy arrays.
+    
+    Parameters:
+    - data: Input data (Pandas DataFrame or NumPy ndarray).
+    - method: "standard" (StandardScaler) or "minmax" (MinMaxScaler).
+    
+    Returns:
+    - Scaled data (same type as input).
     """
     scaler = StandardScaler() if method == "standard" else MinMaxScaler()
-    numeric_cols = data.select_dtypes(include=['float', 'int']).columns
-    data[numeric_cols] = scaler.fit_transform(data[numeric_cols])
-    print(f"Données normalisées avec la méthode '{method}'.")
-    return data
+    
+    if isinstance(data, pd.DataFrame):  # Handle DataFrame
+        numeric_cols = data.select_dtypes(include=['float', 'int']).columns
+        data[numeric_cols] = scaler.fit_transform(data[numeric_cols])
+        print(f"Data normalized using '{method}' method (DataFrame).")
+        return data
+
+    elif isinstance(data, np.ndarray):  # Handle ndarray
+        if not np.issubdtype(data.dtype, np.number):
+            raise ValueError("All elements in the NumPy array must be numeric.")
+        scaled_data = scaler.fit_transform(data)
+        print(f"Data normalized using '{method}' method (NumPy array).")
+        return scaled_data
+
+    else:
+        raise TypeError("Input data must be a Pandas DataFrame or NumPy ndarray.")
+
 
 # 5. Réduction de dimension avec PCA
 def reduce_dimension_pca(data, n_components=0.95):
